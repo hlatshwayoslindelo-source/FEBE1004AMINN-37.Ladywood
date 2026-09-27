@@ -1,5 +1,4 @@
 from pathlib import Path
-from io import BytesIO
 import json
 
 import pandas as pd
@@ -34,10 +33,11 @@ h1,h2,h3 { color:#4DA3FF; }
 """, unsafe_allow_html=True)
 
 st.title("Ladywood Environmental Dashboard")
+
 st.markdown(
     "<div class='info-card'><b>MIIN Group 37 FEBE1004A</b><br>"
-    "This interactive dashboard updates from online data sources for air quality, rainfall, brownfield, "
-    "and surface-water flooding where live/public links are available.<br><br>"
+    "This interactive dashboard uses local uploaded data files for brownfield and surface-water flooding, "
+    "while air quality and rainfall update from online live data sources.<br><br>"
     "<b>Members:</b><br>"
     "Sanelisiwe Ntshangase<br>"
     "Christopher Matsimela<br>"
@@ -47,14 +47,19 @@ st.markdown(
 
 
 # =========================
-# LIVE DATA SOURCE LINKS
+# FILES AND LIVE LINKS
 # =========================
+BASE_DIR = Path(__file__).parent
+
+# These two files must be uploaded to the same GitHub folder as this Python file.
+BROWNFIELD_FILE = BASE_DIR / "brownfield.xlsx"
+FLOOD_FILE = BASE_DIR / "surface_water_flooding.json"
+
 # Ladywood / Birmingham approximate coordinate
 LATITUDE = 52.4797
 LONGITUDE = -1.9027
 
-BROWNFIELD_URL = "https://www.birmingham.gov.uk/downloads/file/9037/brownfield_register"
-
+# These two update from online APIs.
 AIR_QUALITY_URL = (
     "https://air-quality-api.open-meteo.com/v1/air-quality"
     f"?latitude={LATITUDE}&longitude={LONGITUDE}"
@@ -68,14 +73,6 @@ RAINFALL_URL = (
     "&hourly=precipitation,rain,showers"
     "&timezone=Europe/London"
 )
-
-SURFACE_WATER_WMS_URL = (
-    "https://environment.data.gov.uk/spatialdata/risk-of-flooding-from-surface-water-hazard/wms"
-)
-
-# This is a Ladywood/Birmingham bounding box.
-# Format: min longitude, min latitude, max longitude, max latitude
-LADYWOOD_BBOX = "-1.9500,52.4500,-1.8700,52.5100"
 
 YEARS = [2026, 2025, 2024, 2023, 2022]
 
@@ -94,7 +91,6 @@ def clean_cols(df):
 
 
 def make_numeric(df):
-    """Convert columns to numeric where possible."""
     if df.empty:
         return df
 
@@ -189,6 +185,52 @@ def map_if_possible(df):
         st.info("Coordinate columns were found, but no valid points could be mapped.")
 
 
+def first_coord(geometry):
+    if not geometry:
+        return None
+
+    current = geometry.get("coordinates")
+
+    try:
+        while isinstance(current, list):
+            if (
+                len(current) >= 2
+                and isinstance(current[0], (int, float))
+                and isinstance(current[1], (int, float))
+            ):
+                lon = current[0]
+                lat = current[1]
+                return lat, lon
+
+            current = current[0]
+    except Exception:
+        return None
+
+    return None
+
+
+def flood_table(geojson_data):
+    rows = []
+
+    for i, feature in enumerate(geojson_data.get("features", []), start=1):
+        row = {
+            "feature_number": i,
+            "feature_id": feature.get("id", "")
+        }
+
+        properties = feature.get("properties", {})
+        if isinstance(properties, dict):
+            row.update(properties)
+
+        point = first_coord(feature.get("geometry", {}))
+        if point:
+            row["lat"], row["lon"] = point
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def show_chart_and_table(df, chart_label):
     if df.empty:
         st.warning("No records to show.")
@@ -206,27 +248,39 @@ def show_chart_and_table(df, chart_label):
 
 
 # =========================
-# LIVE LOADERS
+# DATA LOADERS
 # =========================
 @st.cache_data(ttl=1800)
 def load_brownfield():
     """
-    Loads the Birmingham Brownfield Register from Birmingham City Council.
-    This updates when the council updates the official register.
+    Loads brownfield from the uploaded local Excel file.
     """
-    headers = {"User-Agent": "Mozilla/5.0"}
+    if not BROWNFIELD_FILE.exists():
+        raise FileNotFoundError("brownfield.xlsx was not found in the GitHub repo.")
 
-    response = requests.get(BROWNFIELD_URL, headers=headers, timeout=30)
-    response.raise_for_status()
+    df = pd.read_excel(BROWNFIELD_FILE)
+    return clean_cols(make_numeric(df))
 
-    df = pd.read_excel(BytesIO(response.content))
-    return clean_cols(df)
+
+@st.cache_data(ttl=1800)
+def load_surface_water_flooding():
+    """
+    Loads surface-water flooding from the uploaded local GeoJSON/JSON file.
+    """
+    if not FLOOD_FILE.exists():
+        raise FileNotFoundError("surface_water_flooding.json was not found in the GitHub repo.")
+
+    with open(FLOOD_FILE, "r", encoding="utf-8") as file:
+        geojson_data = json.load(file)
+
+    df = flood_table(geojson_data)
+    return clean_cols(make_numeric(df))
 
 
 @st.cache_data(ttl=1800)
 def load_air_quality():
     """
-    Loads current/live hourly air-quality forecast data from Open-Meteo.
+    Loads live hourly air-quality data from Open-Meteo.
     """
     response = requests.get(AIR_QUALITY_URL, timeout=30)
     response.raise_for_status()
@@ -241,7 +295,7 @@ def load_air_quality():
 @st.cache_data(ttl=1800)
 def load_rainfall():
     """
-    Loads current/live hourly rainfall and precipitation forecast data from Open-Meteo.
+    Loads live hourly rainfall and precipitation data from Open-Meteo.
     """
     response = requests.get(RAINFALL_URL, timeout=30)
     response.raise_for_status()
@@ -251,28 +305,6 @@ def load_rainfall():
 
     df = pd.DataFrame(hourly)
     return clean_cols(make_numeric(df))
-
-
-@st.cache_data(ttl=1800)
-def load_surface_water_map_url():
-    """
-    Surface-water flooding is provided as an official WMS map layer.
-    This function returns a live image URL for the Ladywood/Birmingham area.
-    """
-    return (
-        SURFACE_WATER_WMS_URL
-        + "?service=WMS"
-        + "&request=GetMap"
-        + "&version=1.3.0"
-        + "&layers=Risk_of_Flooding_from_Surface_Water_Hazard"
-        + "&styles="
-        + "&crs=EPSG:4326"
-        + f"&bbox={LADYWOOD_BBOX}"
-        + "&width=1000"
-        + "&height=700"
-        + "&format=image/png"
-        + "&transparent=true"
-    )
 
 
 # =========================
@@ -293,7 +325,7 @@ section = st.sidebar.radio(
 year = st.sidebar.selectbox("Year", YEARS, index=0)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Data refreshes every 30 minutes while the app is running.")
+st.sidebar.caption("Air quality and rainfall refresh every 30 minutes.")
 
 
 # =========================
@@ -310,6 +342,13 @@ except Exception as e:
     errors.append(("Brownfield", e))
 
 try:
+    flood_all = load_surface_water_flooding()
+    flood_year = filter_year(flood_all, year)
+except Exception as e:
+    flood_all = flood_year = pd.DataFrame()
+    errors.append(("Surface-Water Flooding", e))
+
+try:
     air_all = load_air_quality()
     air_year = filter_year(air_all, year)
 except Exception as e:
@@ -323,12 +362,6 @@ except Exception as e:
     rainfall_all = rainfall_year = pd.DataFrame()
     errors.append(("Rainfall", e))
 
-try:
-    surface_water_map_url = load_surface_water_map_url()
-except Exception as e:
-    surface_water_map_url = ""
-    errors.append(("Surface-Water Flooding", e))
-
 
 # =========================
 # DASHBOARD SECTIONS
@@ -339,15 +372,15 @@ if section == "Overview":
     c1, c2, c3, c4, c5 = st.columns(5)
 
     c1.metric("Selected year", year)
-    c2.metric("Brownfield records", len(brown_year))
-    c3.metric("Air-quality records", len(air_year if not air_year.empty else air_all))
-    c4.metric("Rainfall records", len(rainfall_year if not rainfall_year.empty else rainfall_all))
-    c5.metric("Surface-water layer", "Loaded" if surface_water_map_url else "Error")
+    c2.metric("Ladywood brownfield records", len(brown_year))
+    c3.metric("Surface-water flooding features", len(flood_year if not flood_year.empty else flood_all))
+    c4.metric("Air-quality records", len(air_year if not air_year.empty else air_all))
+    c5.metric("Rainfall records", len(rainfall_year if not rainfall_year.empty else rainfall_all))
 
     st.markdown(
         "<div class='info-card'>"
-        "This dashboard uses online data sources. Brownfield updates when Birmingham City Council updates its register. "
-        "Air quality and rainfall update from Open-Meteo. Surface-water flooding displays the Environment Agency WMS map layer."
+        "Brownfield and surface-water flooding are loaded from the uploaded data files. "
+        "Air quality and rainfall update from online APIs."
         "</div>",
         unsafe_allow_html=True
     )
@@ -372,6 +405,17 @@ elif section == "Brownfield":
     map_if_possible(df)
 
 
+elif section == "Surface-Water Flooding":
+    st.header("Surface-Water Flooding")
+
+    q = st.text_input("Search flooding records", "")
+    df = search_rows(flood_year if not flood_year.empty else flood_all, q)
+
+    st.metric("Features shown", len(df))
+    st.dataframe(df, use_container_width=True)
+    map_if_possible(df)
+
+
 elif section == "Air Quality":
     st.header("Air Quality")
 
@@ -392,25 +436,6 @@ elif section == "Rainfall":
     show_chart_and_table(df, "rainfall")
 
 
-elif section == "Surface-Water Flooding":
-    st.header("Surface-Water Flooding")
-
-    st.info(
-        "This section uses the official Environment Agency WMS surface-water flood hazard layer. "
-        "It is a live map service, not a normal CSV table."
-    )
-
-    if surface_water_map_url:
-        st.image(
-            surface_water_map_url,
-            caption="Surface-water flooding hazard layer for Ladywood/Birmingham"
-        )
-
-        st.code(surface_water_map_url)
-    else:
-        st.error("Surface-water flooding map layer could not be loaded.")
-
-
 else:
     st.header("Data Sources")
 
@@ -418,23 +443,23 @@ else:
         pd.DataFrame([
             {
                 "Dataset": "Brownfield",
-                "Type": "Council Excel download",
-                "URL": BROWNFIELD_URL
-            },
-            {
-                "Dataset": "Air Quality",
-                "Type": "Open-Meteo live API",
-                "URL": AIR_QUALITY_URL
-            },
-            {
-                "Dataset": "Rainfall",
-                "Type": "Open-Meteo live API",
-                "URL": RAINFALL_URL
+                "Source type": "Uploaded local file",
+                "File or URL": "brownfield.xlsx"
             },
             {
                 "Dataset": "Surface-Water Flooding",
-                "Type": "Environment Agency WMS map layer",
-                "URL": SURFACE_WATER_WMS_URL
+                "Source type": "Uploaded local file",
+                "File or URL": "surface_water_flooding.json"
+            },
+            {
+                "Dataset": "Air Quality",
+                "Source type": "Live Open-Meteo API",
+                "File or URL": AIR_QUALITY_URL
+            },
+            {
+                "Dataset": "Rainfall",
+                "Source type": "Live Open-Meteo API",
+                "File or URL": RAINFALL_URL
             }
         ]),
         use_container_width=True
