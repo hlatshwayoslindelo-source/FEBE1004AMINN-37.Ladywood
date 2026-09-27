@@ -4,11 +4,6 @@ import json
 import pandas as pd
 import requests
 import streamlit as st
-
-
-# =========================
-# PAGE SETTINGS
-# =========================
 st.set_page_config(page_title="Ladywood Environmental Dashboard", layout="wide")
 
 st.markdown("""
@@ -46,9 +41,6 @@ st.markdown(
 )
 
 
-# =========================
-# FILES AND LIVE LINKS
-# =========================
 BASE_DIR = Path(__file__).parent
 
 # These two files must be uploaded to the same GitHub folder as this Python file.
