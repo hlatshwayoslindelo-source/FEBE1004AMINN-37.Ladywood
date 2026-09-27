@@ -1,6 +1,6 @@
 {
-  "brownfield_url": "",
-  "surface_water_flooding_url": "",
-  "air_quality_url": "",
-  "rainfall_url": ""
+  "brownfield_url": "https://www.birmingham.gov.uk/downloads/file/9037/brownfield_register",
+  "surface_water_flooding_url": "https://environment.data.gov.uk/explore/b5aaa28d-6eb9-460e-8d6f-43caa71fbe0e?download=true",
+  "air_quality_url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=52.4797&longitude=-1.9027&hourly=pm10,pm2_5,nitrogen_dioxide,ozone&timezone=Europe/London",
+  "rainfall_url": "https://api.open-meteo.com/v1/forecast?latitude=52.4797&longitude=-1.9027&hourly=precipitation,rain,showers&timezone=Europe/London"
 }
