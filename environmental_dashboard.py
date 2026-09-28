@@ -30,7 +30,7 @@ h1,h2,h3 { color:#4DA3FF; }
 st.title("Ladywood Environmental Dashboard")
 
 st.markdown(
-    "<div class='info-card'><b>MIIN Group 37 FEBE1004A</b><br>"
+    "<div class='info-card'><b>MINN Group 37 FEBE1004A</b><br>"
     "This interactive dashboard uses local uploaded data files for brownfield and surface-water flooding, "
     "while air quality and rainfall update from online live data sources.<br><br>"
     "<b>Members:</b><br>"
