@@ -34,8 +34,8 @@ st.markdown(
     "This interactive dashboard uses local uploaded data files for brownfield and surface-water flooding, "
     "while air quality and rainfall update from online live data sources.<br><br>"
     "<b>Members:</b><br>"
-    "Sanelisiwe Ntshangase<br>"
-    "Christopher Matsimela<br>"
+    "Sanelisiwe Ntshangase <br>"
+    "Christopher Matsimela <br>"
     "Slindelokuhle Hlatshwayo 3098757 </div>",
     unsafe_allow_html=True
 )
