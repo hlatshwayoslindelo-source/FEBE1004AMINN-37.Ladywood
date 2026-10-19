@@ -36,7 +36,7 @@ st.markdown(
     "<b>Members:</b><br>"
     "Sanelisiwe Ntshangase<br>"
     "Christopher Matsimela<br>"
-    "Slindelokuhle Hlatshwayo</div>",
+    "Slindelokuhle Hlatshwayo 3098757</div>",
     unsafe_allow_html=True
 )
 
